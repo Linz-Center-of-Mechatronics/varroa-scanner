@@ -1,0 +1,8 @@
+--- /boot/config.txt	2021-04-07 14:24:04.000000000 +0200
++++ /boot/config.txt	2021-04-07 14:25:04.000000000 +0200
+@@ -63,3 +63,5 @@
+ 
+ [all]
+ #dtoverlay=vc4-fkms-v3d
++
++lcd_rotate=2

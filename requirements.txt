@@ -1,0 +1,5 @@
+opencv-python~=4.5.1.48
+tk~=0.1.0
+setuptools~=51.3.3
+Pillow~=8.2.0
+numpy~=1.19.5

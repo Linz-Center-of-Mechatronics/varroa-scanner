@@ -1,0 +1,8 @@
+diff -ruN .config/autostart/beeclientCamera.desktop .config/autostart/beeclientCamera.desktop
+--- .config/autostart/beeclientCamera.desktop	1970-01-01 01:00:00.000000000 +0100
++++ .config/autostart/beeclientCamera.desktop	2021-04-07 15:00:17.053397625 +0200
+@@ -0,0 +1,4 @@
++[Desktop Entry]
++Type=Application
++Name=BeeClientCamera
++Exec=/home/pi/beebox-drop-scanner/drop_scanner.camera
