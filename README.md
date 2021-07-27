@@ -1,4 +1,4 @@
-# beeClient (Varroa Drop Scanner)
+# Varroa Drop Scanner (beeClient)
 
 This package adds the functionality of scanning and clearing the droppings of a beehive to the beeClient.
 
@@ -9,12 +9,15 @@ The **drop-scanner** uses cameras to record images of the bee droppings. The dro
 A RaspberryPi is used as a platform.
 
 ### Cameras
-UVC compliant USB camera modules are used.
+#### USB
+UVC compliant USB camera modules.
+#### CSI
+CSI Pi Cameras. If CSI camera does not work after applying the software setup check the camera to be enabled and properly installed ([Install Guide](https://www.raspberrypi.org/documentation/usage/camera/installing.md)):
+- In GUI: Preferences - Interfaces - Camera (Enable)
+- From CMD Line: sudo raspi-config Interface Options - Camera - Yes (Enable)
 
 ### Motor
 A stepper motor is controlled via GPIO and a driver module.
-
-[MKS SERVO42B](https://github.com/makerbase-mks/MKS-SERVO42B)
 
 
 ## Software
@@ -26,7 +29,8 @@ sudo pip install .
 any additional requirements can be installed by running
 ```bash
 sudo pip install -r requirements_rpi.txt
-sudo apt-get install libatlas-base-dev python3-opencv python3-tk
+sudo apt-get update
+sudo apt-get install libatlas-base-dev python3-opencv python3-tk python-picamera python3-picamera
 ```
 apply patches *autostart.patch* and *rotate_screen.patch*:
 ```bash
@@ -39,4 +43,17 @@ sudo patch -p0 /boot/config.txt < beebox-drop-scanner/rotate_screen.patch --verb
 A screen keyboard like *florence* will help to use the *camera* function if there is no keyboard attached.
 ```bash
 sudo apt-get install at-spi2-core florence
+```
+
+### Camera Box
+```
+user: pi
+pw: beeclient
+```
+The provided USB-Drive **must** be named ```0000_Bee```!
+
+### Automated Testing
+Run tests from root directory with:
+```bash
+python3 -m pytest
 ```

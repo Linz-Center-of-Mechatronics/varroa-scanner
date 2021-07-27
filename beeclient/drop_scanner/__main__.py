@@ -14,7 +14,7 @@ from distutils import util
 from ast import literal_eval
 from typing import Callable
 from beeclient.drop_scanner.image import ImageProvider
-from beeclient.drop_scanner.camera import UvcCameraInterface, CameraParameters
+from beeclient.drop_scanner.camera import UvcCameraInterface, CameraParameters, PiCameraInterface
 from beeclient.drop_scanner.hw import HardwareAbstraction, HardwareInterfaceDummy, HardwareInterfacePi
 
 
@@ -35,7 +35,7 @@ def arg_parse() -> argparse.ArgumentParser:
     
     A hierarchical argument parser:
     drop_scan_parser
-      type_parser: {drop-scan | camera}
+      type_parser: {scan | camera}
         drop-scan: {do | get} [--dummy]
           do: {move | light | image}
             move: distance wheel_radius
@@ -77,17 +77,20 @@ def arg_parse() -> argparse.ArgumentParser:
                                     help='set camera hue (default: %(default)s)')
     camera_preferences.add_argument('-g', '--gain', type=int, default=1, metavar='int',
                                     help='set camera gain (default: %(default)s)')
-    camera_preferences.add_argument('-e', '--exposure', type=int, default=157, metavar='int',
-                                    help='set camera exposure (default: %(default)s)')
     camera_preferences.add_argument('-n', '--sharpness', type=int, default=2, metavar='int',
                                     help='set camera sharpness (default: %(default)s)')
-    camera_preferences.add_argument('-w', '--warmup-time', dest='warmup_time', type=float, default=4.0, metavar='float',
+    camera_preferences.add_argument('-w', '--warmup-time', dest='warmup_time', type=float, default=5.0, metavar='float',
                                     help='camera warmup/adjustment time (e.g. to lighting) before taking a picture  '
                                          '(default: %(default)s)')
     camera_preferences.add_argument('-p', '--preview-time', dest='preview_time', type=float, default=10.0, metavar='float',
                                     help='image preview time after image was taken  (default: %(default)s)')
     camera_preferences.add_argument('-a', '--append-properties', dest='append_properties', action='store_true',
                                     default=False, help='append camera properties to image file name')
+    camera_preferences.add_argument('-x', '--camera-type', dest='camera_type', type=str, default='csi',
+                                    choices=['csi', 'usb'],
+                                    help='connected camera type (default: %(default)s)')
+    camera_preferences.add_argument('-q', '--image-quality', dest='image_quality', type=int, default=95,
+                                    help='image quality in %% (default: %(default)s)')
     
     io_preferences = drop_scan_parser.add_argument_group('i/o preferences')
     io_preferences.add_argument('--pin-light', dest='pin_light', default=40, metavar='int',
@@ -96,8 +99,15 @@ def arg_parse() -> argparse.ArgumentParser:
                                 help='header pin nr.: step motor (default: %(default)s)')
     io_preferences.add_argument('--pin-dir', dest='pin_dir', default=38, metavar='int',
                                 help='header pin nr.: direction motor (default: %(default)s)')
-    io_preferences.add_argument('--pin-en', dest='pin_en', default=36, metavar='int',
-                                help='header pin nr.: enable motor (default: %(default)s)')
+    io_preferences.add_argument('--pin-n-en', dest='pin_n_en', default=36, metavar='int',
+                                help='header pin nr.: not enable motor (default: %(default)s)')
+    io_preferences.add_argument('--pin-n-sleep', dest='pin_n_sleep', default=33, metavar='int',
+                                help='header pin nr.: not sleep (default: %(default)s)')
+    io_preferences.add_argument('--pin-n-reset', dest='pin_n_reset', default=35, metavar='int',
+                                help='header pin nr.: not reset (default: %(default)s)')
+    io_preferences.add_argument('--motor-steps-per-rev', dest='motor_steps_per_rev', default=200,
+                                metavar='int', type=int,
+                                help='steps per revolution of stepper motor (default: %(default)s)')
 
     type_parsers = drop_scan_parser.add_subparsers(dest=TYPE)
     scan_parser = type_parsers.add_parser(TYPE_SCAN, help='droppings scanning utility')
@@ -111,7 +121,7 @@ def arg_parse() -> argparse.ArgumentParser:
                                  help='distance to move the sheet module [mm]')
     distance_parser.add_argument('wheel_radius', type=float, metavar='float',
                                  help='transport wheel radius of the sheet module [mm]')
-    distance_parser.add_argument('--velocity', type=float, default=0.1, metavar='float',
+    distance_parser.add_argument('--velocity', type=float, default=0.05, metavar='float',
                                  help='velocity to move the sheet module at [m/s] (default: %(default)s m/s)')
     distance_parser.add_argument('--gear-ratio', dest='gear_ratio', type=float, default=6, metavar='float',
                                  help='gear ratio of motor to sheet (default: %(default)s)')
@@ -225,12 +235,25 @@ def main():
         hwi_class = HardwareInterfaceDummy
     else:
         hwi_class = HardwareInterfacePi
-    hwa = HardwareAbstraction(hwi_class, args.pin_light, args.pin_en, args.pin_step, args.pin_dir)
+    hwa = HardwareAbstraction(
+        hwi_class,
+        pin_light=args.pin_light, pin_n_en=args.pin_n_en, pin_n_reset=args.pin_n_reset, pin_n_sleep=args.pin_n_sleep,
+        pin_step=args.pin_step, pin_dir=args.pin_dir, mot_steps_per_rev=args.motor_steps_per_rev
+    )
     camera_parameters = CameraParameters(
         size=args.size, fps=args.fps, fourcc=args.fourcc,
+        camera_warm_up_time=args.warmup_time,
         brightness=args.brightness, contrast=args.contrast, saturation=args.saturation, hue=args.hue, gain=args.gain,
-        sharpness=args.sharpness
+        sharpness=args.sharpness, image_quality=args.image_quality
     )
+    
+    if args.camera_type == 'csi':
+        camera_interface = PiCameraInterface
+        args.warmup_time = 0
+    elif args.camera_type == 'usb':
+        camera_interface = UvcCameraInterface
+    else:
+        raise ValueError('{} is not supported!'.format(args.camera_type))
     
     if args.type == TYPE_SCAN:
         
@@ -241,12 +264,11 @@ def main():
             if args.action == ACTION_LIGHT:
                 hwa.set_light(on=args.on)
             if args.action == ACTION_IMAGE:
-                image_provider = ImageProvider(camera_interface=UvcCameraInterface, camera_warmup=args.warmup_time,
-                                               image_preview=args.preview_time, camera_parameters=camera_parameters,
+                image_provider = ImageProvider(camera_interface=camera_interface, camera_parameters=camera_parameters,
                                                destination_dir=args.destination,
-                                               camera_props_filename=args.append_properties)
+                                               append_camera_props_filename=args.append_properties)
                 hwa.set_light(on=args.light)
-                image_provider.capture_images()
+                image_provider.capture_images(destination_dir=args.destination, warm_up=True, preview=False, save=True)
                 hwa.set_light(on=False)
             
         elif args.cmd == CMD_GET:
@@ -258,10 +280,10 @@ def main():
             logging.info(states)
 
     elif args.type == TYPE_CAMERA:
-        image_provider = ImageProvider(camera_interface=UvcCameraInterface, camera_warmup=args.warmup_time,
+        image_provider = ImageProvider(camera_interface=camera_interface, camera_parameters=camera_parameters,
                                        destination_dir=args.destination,
-                                       image_preview=args.preview_time, camera_parameters=camera_parameters,
-                                       debug=args.debug, camera_props_filename=args.append_properties)
+                                       append_camera_props_filename=args.append_properties,
+                                       debug=args.debug)
         if args.debug:
             image_provider.run_preview(size=(640, 480), hwa=hwa)
         else:

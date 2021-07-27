@@ -6,4 +6,4 @@ sleep 6
 florence hide
 
 # launch beeclient.drop_scanner in camera mode
-sudo -u pi python3 -m beeclient.drop_scanner --file-log /home/pi/beebox-drop-scanner/drop_scanner.camera.log camera
+sudo -u pi python3 -m beeclient.drop_scanner --file-log /home/pi/beebox-drop-scanner/drop_scanner.camera.log camera -d /media/pi/0000_Bee

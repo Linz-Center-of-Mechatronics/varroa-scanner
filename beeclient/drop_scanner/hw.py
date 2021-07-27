@@ -17,7 +17,7 @@ class HardwareInterface(ABC):
     Interfaces the hardware to perform all actions requiring hardware.
     """
     
-    steps_per_rev = 3200
+    steps_per_rev = 200
     """Stepper motors number of steps per revolution
     """
     
@@ -119,19 +119,26 @@ class HardwareInterfacePi(HardwareInterface):
     ----------
     pin_light
         GPIO pin (board numbering) to control the light
-    pin_en
-        GPIO pin (board numbering) to enable the motor
+    pin_n_en
+        GPIO pin (board numbering) to enable the motor (negated)
+    pin_n_reset
+        GPIO pin (board numbering) to reset driver (negated)
+    pin_n_sleep
+        GPIO pin (board numbering) to set motor driver into sleep mode (negated)
     pin_step
         GPIO pin (board numbering) to perform a motor step
     pin_dir
         GPIO pin (board numbering) to control the motor direction
+    mot_steps_per_rev
+        Motor steps per revolution
     """
     
-    pulse_dur = 20.0e-6
-    """Pulse duration for stepper motor control
+    pulse_dur_min = 5.0e-6
+    """Minimum pulse duration for stepper motor control
     """
     
-    def __init__(self, pin_light: int, pin_en: int, pin_step: int, pin_dir: int):
+    def __init__(self, pin_light: int, pin_n_en: int, pin_n_reset: int, pin_n_sleep: int, pin_step: int, pin_dir: int,
+                 mot_steps_per_rev: int):
         from beeclient.drop_scanner.image import ImageProvider
         try:
             import RPi.GPIO as GPIO
@@ -140,13 +147,18 @@ class HardwareInterfacePi(HardwareInterface):
             raise RuntimeError("Error importing RPi.GPIO! Have you added your user to the group gpio?")
         
         self._pin_light = pin_light
-        self._pin_en = pin_en
+        self._pin_n_en = pin_n_en
+        self._pin_n_slp = pin_n_sleep
+        self._pin_n_rst = pin_n_reset
         self._pin_step = pin_step
         self._pin_dir = pin_dir
+        self.steps_per_rev = mot_steps_per_rev
         self._gpio.setmode(self._gpio.BOARD)
         self._gpio.setwarnings(False)
-        self._gpio.setup([self._pin_dir, self._pin_en, self._pin_step, self._pin_light],
+        self._gpio.setup([self._pin_dir, self._pin_step, self._pin_light, self._pin_n_slp],
                          self._gpio.OUT, initial=self._gpio.LOW)
+        self._gpio.setup([self._pin_n_en, self._pin_n_rst],
+                         self._gpio.OUT, initial=self._gpio.HIGH)
         
         self.image_provider_class = ImageProvider
 
@@ -161,46 +173,52 @@ class HardwareInterfacePi(HardwareInterface):
     def get_light_gpio(self):
         return self._gpio.input(self._pin_light)
 
-    def set_stepper_motor(self, steps, ts, t_en=10.0e-3, t_bias=180.0e-6):
-        ts -= t_bias
-        if ts <= 2 * self.pulse_dur:
-            ts = 2 * self.pulse_dur
-        t_on = ts / 2
-        t_off = ts - t_on
+    def set_stepper_motor(self, steps, ts):
+        if ts < self.pulse_dur_min:
+            ts = self.pulse_dur_min
         
         try:
-            # enable motor
-            logging.debug('en:  {} -> {}'.format(self._pin_en, 'HIGH'))
-            self._gpio.output(self._pin_en, self._gpio.HIGH)
-            # set direction
-            logging.debug('dir: {} -> {}'.format(self._pin_dir, 'HIGH'))
-            self._gpio.output(self._pin_dir, self._gpio.HIGH)
+            logging.debug('init pwm')
+            
+            # stepper pwm
+            pwm = self._gpio.PWM(self._pin_step, int(1 / ts))
+
+            # disable motor driver deep sleep
+            logging.debug('n_slp: {} -> {}'.format(self._pin_n_slp, 'HIGH'))
+            self._gpio.output(self._pin_n_slp, self._gpio.HIGH)
+            time.sleep(0.005)
+            
+            # enable motor driver outputs
+            logging.debug('n_en:  {} -> {}'.format(self._pin_n_en, 'LOW'))
+            self._gpio.output(self._pin_n_en, self._gpio.LOW)
+            time.sleep(0.005)
             
             # wait a bit
-            time.sleep(t_en)
+            time.sleep(0.1)
 
             # perform movement
-            for _ in range(steps):
-                self._gpio.output(self._pin_step, self._gpio.HIGH)
-                time.sleep(t_on)
-                self._gpio.output(self._pin_step, self._gpio.LOW)
-                time.sleep(t_off)
+            logging.debug('pwm:   {} -> {}'.format(self._pin_step, 'ON'))
+            pwm.start(50)  # pwm with 50% duty cycle
+            time.sleep(ts * steps)
+            logging.debug('pwm:   {} -> {}'.format(self._pin_step, 'OFF'))
+            pwm.stop()
                 
         except KeyboardInterrupt:
             pass
         
         finally:
             # disable motor
-            logging.debug('en:  {} -> {}'.format(self._pin_en, 'LOW'))
-            self._gpio.output(self._pin_en, self._gpio.LOW)
+            logging.debug('disable motor')
+            logging.debug('n_en:  {} -> {}'.format(self._pin_n_en, 'HIGH'))
+            self._gpio.output(self._pin_n_en, self._gpio.HIGH)
             # reset pin states
-            logging.debug('dir: {} -> {}'.format(self._pin_dir, 'LOW'))
-            self._gpio.output(self._pin_dir, self._gpio.LOW)
-            logging.debug('stp: {} -> {}'.format(self._pin_step, 'LOW'))
+            logging.debug('n_slp: {} -> {}'.format(self._pin_n_slp, 'LOW'))
+            self._gpio.output(self._pin_n_slp, self._gpio.LOW)
+            logging.debug('stp:   {} -> {}'.format(self._pin_step, 'LOW'))
             self._gpio.output(self._pin_step, self._gpio.LOW)
 
     def get_stepper_motor_stat(self):
-        return self._gpio.input(self._pin_en), self._gpio.input(self._pin_step), self._gpio.input(self._pin_dir)
+        return self._gpio.input(self._pin_n_en), self._gpio.input(self._pin_step), self._gpio.input(self._pin_dir)
 
 
 class HardwareAbstraction(object):
