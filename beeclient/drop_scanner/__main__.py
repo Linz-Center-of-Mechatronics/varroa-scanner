@@ -105,7 +105,7 @@ def arg_parse() -> argparse.ArgumentParser:
                                 help='header pin nr.: not sleep (default: %(default)s)')
     io_preferences.add_argument('--pin-n-reset', dest='pin_n_reset', default=35, metavar='int',
                                 help='header pin nr.: not reset (default: %(default)s)')
-    io_preferences.add_argument('--motor-steps-per-rev', dest='motor_steps_per_rev', default=200,
+    io_preferences.add_argument('--motor-steps-per-rev', dest='motor_steps_per_rev', default=3200,
                                 metavar='int', type=int,
                                 help='steps per revolution of stepper motor (default: %(default)s)')
 
@@ -121,7 +121,7 @@ def arg_parse() -> argparse.ArgumentParser:
                                  help='distance to move the sheet module [mm]')
     distance_parser.add_argument('wheel_radius', type=float, metavar='float',
                                  help='transport wheel radius of the sheet module [mm]')
-    distance_parser.add_argument('--velocity', type=float, default=0.05, metavar='float',
+    distance_parser.add_argument('--velocity', type=float, default=0.04, metavar='float',
                                  help='velocity to move the sheet module at [m/s] (default: %(default)s m/s)')
     distance_parser.add_argument('--gear-ratio', dest='gear_ratio', type=float, default=6, metavar='float',
                                  help='gear ratio of motor to sheet (default: %(default)s)')

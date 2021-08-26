@@ -173,6 +173,10 @@ class HardwareInterfacePi(HardwareInterface):
     def get_light_gpio(self):
         return self._gpio.input(self._pin_light)
 
+    @staticmethod
+    def tmc2209_velocity_scaling_compensation(v):
+        return v / (-6.686362 * v**2 + 0.955385 * v + 0.000352)
+    
     def set_stepper_motor(self, steps, ts):
         if ts < self.pulse_dur_min:
             ts = self.pulse_dur_min
@@ -342,9 +346,9 @@ class HardwareAbstraction(object):
         
         logging.debug('move_sheet {}'.format(dist))
         self.hwi.set_stepper_motor(
-            self.calc_steps_for_distance(
+            int(self.calc_steps_for_distance(
                 dist=dist, radius=wheel_radius / trans, steps_pre_rev=self.hwi.steps_per_rev
-            ),
+            ) * HardwareInterfacePi.tmc2209_velocity_scaling_compensation(vel)),
             self.calc_stepper_motor_sleep_time(
                 velocity=vel, radius=wheel_radius / trans, steps_pre_rev=self.hwi.steps_per_rev)
         )

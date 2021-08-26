@@ -17,7 +17,7 @@ CSI Pi Cameras. If CSI camera does not work after applying the software setup ch
 - From CMD Line: sudo raspi-config Interface Options - Camera - Yes (Enable)
 
 ### Motor
-A stepper motor is controlled via GPIO and a driver module.
+A stepper motor is controlled via GPIO and a [TMC2209](https://www.trinamic.com/fileadmin/assets/Products/ICs_Documents/TMC2209_Datasheet_V103.pdf) [Module](https://www.bigtree-tech.com/products/bigtreetech-tmc2209-v1-2-uart-stepper-motor-driver.html) driver module.
 
 
 ## Software
